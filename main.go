@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/gosnmp/gosnmp"
@@ -20,21 +20,26 @@ type SnmpEntry struct {
 }
 
 func main() {
+	host := os.Args[1]
+	community := os.Args[2]
+	port := uint16(161)
+	oid := "1.3.6.1.2.1.4.22.1.2"
 
-	results, err := getRawArpTableBySNMP("192.168.10.42", 161, "test-arp-table", "1.3.6.1.2.1.4.22.1.2")
+	results, err := getRawArpTableBySNMP(host, port, community, oid)
 	if err != nil {
 		log.Fatalf("Error: %s", err)
 	}
 
 	parsed_table, _ := parseRawArpTableAsJson(results)
 
-	fmt.Println(parsed_table)
-
 	data, err := json.Marshal(parsed_table)
 	if err != nil {
 		log.Fatalf("Error: %s", err)
 	}
 
+	if _, e := os.Stdout.Write(data); e != nil {
+		panic(e)
+	}
 }
 
 func getRawArpTableBySNMP(host string, port uint16, community string, oid string) ([]gosnmp.SnmpPDU, error) {
