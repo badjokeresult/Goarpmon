@@ -166,7 +166,6 @@ func calcExtraAddresses(arpTable *SnmpData) (map[string][]string, map[string][]s
 		}
 	}
 
-	fmt.Fprintln(os.Stdout, macIps, ipMacs)
 	return macIps, ipMacs, nil
 }
 
