@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/gosnmp/gosnmp"
@@ -26,36 +27,63 @@ func main() {
 	port := uint16(161)
 	oid := "1.3.6.1.2.1.4.22.1.2"
 
+	logf, err := os.OpenFile("arpmon.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatalf("Error: %s", err)
+	}
+	defer logf.Close()
+	log.SetOutput(logf)
+
 	results, err := getRawArpTableBySNMP(host, port, community, oid)
 	if err != nil {
 		log.Fatalf("Error: %s", err)
 	}
+	log.Printf("ARP-table was received from %s by SNMPv2c", host)
 
-	parsed_table, _ := parseRawArpTable(results)
+	parsed_table, err := parseRawArpTable(results)
+	if err != nil {
+		log.Fatalf("Error parsing raw ARP-table: %s", err)
+	}
+	log.Printf("ARP-table was successfully parsed")
 
-	multuple_macs_on_single_ip, _ := calcMultipleMacsOnSingleIp(parsed_table)
-	multiple_ips_on_signle_mac, _ := calcMultipleIpsOnSingleMac(parsed_table)
+	multiple_ips_on_single_mac, multiple_macs_on_single_ip, err := calcExtraAddresses(parsed_table)
+	if err != nil {
+		log.Fatalf("Error: %s", err)
+	}
+	log.Printf("Addresses' dissonances were calculated successfully")
 
 	config := "/etc/zabbix/zabbix_agentd.conf"
 	sender := "/usr/bin/zabbix_sender"
-
 	if err = sendDataToZabbix(sender, config, "arp.discovery", parsed_table); err != nil {
 		log.Fatalf("Error: %s", err)
 	}
+	log.Printf("ARP-table was sent to Zabbix successfully")
 
-	for key, value := range multuple_macs_on_single_ip {
+	for key, value := range multiple_macs_on_single_ip {
 		macsList := strings.Join(value, " ")
+		macCount := strconv.Itoa(len(value))
 		if err = sendDataToZabbix(sender, config, fmt.Sprintf("arp.ipMacs[%s]", key), macsList); err != nil {
 			log.Fatalf("Error: %s", err)
 		}
-	}
-
-	for key, value := range multiple_ips_on_signle_mac {
-		ipsList := strings.Join(value, " ")
-		if err = sendDataToZabbix(sender, config, fmt.Sprintf("arp.macIps[%s]", key), ipsList); err != nil {
+		if err = sendDataToZabbix(sender, config, fmt.Sprintf("arp.macCount[%s]", key), macCount); err != nil {
 			log.Fatalf("Error: %s", err)
 		}
 	}
+	log.Printf("\"Multiple MACs Single IP\" dissonances were sent to Zabbix successfully")
+
+	for key, value := range multiple_ips_on_single_mac {
+		ipsList := strings.Join(value, " ")
+		ipCount := strconv.Itoa(len(value))
+
+		if err = sendDataToZabbix(sender, config, fmt.Sprintf("arp.macIps[%s]", key), ipsList); err != nil {
+			log.Fatalf("Error: %s", err)
+		}
+		if err = sendDataToZabbix(sender, config, fmt.Sprintf("arp.ipCount[%s]", key), ipCount); err != nil {
+			log.Fatalf("Error: %s", err)
+		}
+	}
+	log.Printf("\"Multiple IPs Single MAC\" dissonances were sent to Zabbix successfully")
+
 }
 
 func getRawArpTableBySNMP(host string, port uint16, community string, oid string) ([]gosnmp.SnmpPDU, error) {
@@ -69,13 +97,13 @@ func getRawArpTableBySNMP(host string, port uint16, community string, oid string
 
 	err := g.Connect()
 	if err != nil {
-		log.Fatalf("Error connecting")
+		return nil, err
 	}
 	defer g.Conn.Close()
 
 	results, err := g.BulkWalkAll(oid)
 	if err != nil {
-		log.Fatalf("Error getting ARP")
+		return nil, err
 	}
 
 	return results, nil
@@ -85,16 +113,17 @@ func parseRawArpTable(table []gosnmp.SnmpPDU) (*SnmpData, error) {
 	results := []SnmpEntry{}
 	for _, entry := range table {
 		ipAddr, _ := formatIpAddr(entry.Name)
-		value := string(entry.Value.([]byte)[:])
-		hwAddr, _ := formatMacAddr(string(value))
-		results = append(results, SnmpEntry{
-			IpAddress: ipAddr,
-			HwAddress: hwAddr,
-		})
+		if hwAsByteArr, ok := entry.Value.([]byte); ok {
+			hwAddr, _ := formatMacAddr(hwAsByteArr)
+			results = append(results, SnmpEntry{
+				IpAddress: ipAddr,
+				HwAddress: hwAddr,
+			})
+		}
 	}
 
 	return &SnmpData{
-		Data: results,
+		Data: results[:],
 	}, nil
 }
 
@@ -104,37 +133,41 @@ func formatIpAddr(addr string) (string, error) {
 	return ipAddr, nil
 }
 
-func formatMacAddr(addr string) (string, error) {
-	tmpArr := []string{}
-	for i := 0; i < len(addr); i += 2 {
-		tmpArr = append(tmpArr, addr[i:i+2])
+func formatMacAddr(addr []byte) (string, error) {
+	result := []string{}
+	for i := 0; i < len(addr); i++ {
+		result = append(result, fmt.Sprintf("%02X", addr[i]))
 	}
-	mac := strings.Join(tmpArr, ":")
-	return mac, nil
+	return strings.Join(result, ":"), nil
 }
 
-func calcMultipleMacsOnSingleIp(arp_table *SnmpData) (map[string][]string, error) {
-	results := make(map[string][]string)
-	for _, entry := range arp_table.Data {
-		if _, ok := results[entry.HwAddress]; ok {
-			results[entry.HwAddress] = append(results[entry.HwAddress], entry.IpAddress)
-		} else {
-			results[entry.HwAddress] = []string{}
+func calcExtraAddresses(arpTable *SnmpData) (map[string][]string, map[string][]string, error) {
+	macIps := make(map[string][]string)
+	for _, entry := range arpTable.Data {
+		if _, ok := macIps[entry.HwAddress]; !ok {
+			macIps[entry.HwAddress] = []string{}
+			for _, inner := range arpTable.Data {
+				if entry.HwAddress == inner.HwAddress {
+					macIps[entry.HwAddress] = append(macIps[entry.HwAddress], inner.IpAddress)
+				}
+			}
 		}
 	}
-	return results, nil
-}
 
-func calcMultipleIpsOnSingleMac(arp_table *SnmpData) (map[string][]string, error) {
-	results := make(map[string][]string)
-	for _, entry := range arp_table.Data {
-		if _, ok := results[entry.IpAddress]; ok {
-			results[entry.IpAddress] = append(results[entry.IpAddress], entry.HwAddress)
-		} else {
-			results[entry.IpAddress] = []string{}
+	ipMacs := make(map[string][]string)
+	for _, entry := range arpTable.Data {
+		if _, ok := ipMacs[entry.IpAddress]; !ok {
+			ipMacs[entry.IpAddress] = []string{}
+			for _, inner := range arpTable.Data {
+				if entry.IpAddress == inner.IpAddress {
+					ipMacs[entry.IpAddress] = append(ipMacs[entry.IpAddress], entry.HwAddress)
+				}
+			}
 		}
 	}
-	return results, nil
+
+	fmt.Fprintln(os.Stdout, macIps, ipMacs)
+	return macIps, ipMacs, nil
 }
 
 func sendDataToZabbix(sender string, config string, key string, value interface{}) error {
@@ -142,12 +175,16 @@ func sendDataToZabbix(sender string, config string, key string, value interface{
 	if err != nil {
 		return err
 	}
-	f, _ := os.OpenFile("./data.json", os.O_APPEND|os.O_CREATE, 0755)
-	fmt.Fprintf(f, "%v\n\n\n", data[:])
 
 	cmd := exec.Command(sender, "-c", config, "-k", key, "-o", string(data[:]), "-vv")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+
+	f, err := os.OpenFile("zabbix_sender.log", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	cmd.Stdout = f
+	cmd.Stderr = f
 	cmd.Dir = os.Getenv("HOME")
 
 	err = cmd.Run()
