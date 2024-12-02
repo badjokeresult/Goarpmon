@@ -19,6 +19,7 @@ type SnmpData struct {
 type SnmpEntry struct {
 	IpAddress string `json:"ipAddress"`
 	HwAddress string `json:"hwAddress"`
+	HostName  string `json: "hostName"`
 }
 
 func main() {
@@ -40,7 +41,7 @@ func main() {
 	}
 	log.Printf("ARP-table was received from %s by SNMPv2c", host)
 
-	parsed_table, err := parseRawArpTable(results)
+	parsed_table, err := parseRawArpTable(results, host)
 	if err != nil {
 		log.Fatalf("Error parsing raw ARP-table: %s", err)
 	}
@@ -109,7 +110,7 @@ func getRawArpTableBySNMP(host string, port uint16, community string, oid string
 	return results, nil
 }
 
-func parseRawArpTable(table []gosnmp.SnmpPDU) (*SnmpData, error) {
+func parseRawArpTable(table []gosnmp.SnmpPDU, hostName string) (*SnmpData, error) {
 	results := []SnmpEntry{}
 	for _, entry := range table {
 		ipAddr, _ := formatIpAddr(entry.Name)
@@ -118,6 +119,7 @@ func parseRawArpTable(table []gosnmp.SnmpPDU) (*SnmpData, error) {
 			results = append(results, SnmpEntry{
 				IpAddress: ipAddr,
 				HwAddress: hwAddr,
+				HostName:  hostName,
 			})
 		}
 	}
