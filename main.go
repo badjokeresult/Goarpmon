@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-
-	"github.com/gosnmp/gosnmp"
 )
 
 type SnmpData struct {
@@ -26,7 +24,6 @@ func main() {
 	host := os.Args[1]
 	community := os.Args[2]
 	port := uint16(161)
-	oid := "1.3.6.1.2.1.4.22.1.2"
 
 	logf, err := os.OpenFile("arpmon.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
@@ -85,90 +82,6 @@ func main() {
 	}
 	log.Printf("\"Multiple IPs Single MAC\" dissonances were sent to Zabbix successfully")
 
-}
-
-func getRawArpTableBySNMP(host string, port uint16, community string, oid string) ([]gosnmp.SnmpPDU, error) {
-	g := &gosnmp.GoSNMP{
-		Target:    host,
-		Port:      port,
-		Community: community,
-		Version:   gosnmp.Version2c,
-		Timeout:   gosnmp.Default.Timeout,
-	}
-
-	err := g.Connect()
-	if err != nil {
-		return nil, err
-	}
-	defer g.Conn.Close()
-
-	results, err := g.BulkWalkAll(oid)
-	if err != nil {
-		return nil, err
-	}
-
-	return results, nil
-}
-
-func parseRawArpTable(table []gosnmp.SnmpPDU, hostName string) (*SnmpData, error) {
-	results := []SnmpEntry{}
-	for _, entry := range table {
-		ipAddr, _ := formatIpAddr(entry.Name)
-		if hwAsByteArr, ok := entry.Value.([]byte); ok {
-			hwAddr, _ := formatMacAddr(hwAsByteArr)
-			results = append(results, SnmpEntry{
-				IpAddress: ipAddr,
-				HwAddress: hwAddr,
-				HostName:  hostName,
-			})
-		}
-	}
-
-	return &SnmpData{
-		Data: results[:],
-	}, nil
-}
-
-func formatIpAddr(addr string) (string, error) {
-	ipAddrArr := strings.Split(addr, ".")
-	ipAddr := strings.Join(ipAddrArr[len(ipAddrArr)-4:], ".")
-	return ipAddr, nil
-}
-
-func formatMacAddr(addr []byte) (string, error) {
-	result := []string{}
-	for i := 0; i < len(addr); i++ {
-		result = append(result, fmt.Sprintf("%02X", addr[i]))
-	}
-	return strings.Join(result, ":"), nil
-}
-
-func calcExtraAddresses(arpTable *SnmpData) (map[string][]string, map[string][]string, error) {
-	macIps := make(map[string][]string)
-	for _, entry := range arpTable.Data {
-		if _, ok := macIps[entry.HwAddress]; !ok {
-			macIps[entry.HwAddress] = []string{}
-			for _, inner := range arpTable.Data {
-				if entry.HwAddress == inner.HwAddress {
-					macIps[entry.HwAddress] = append(macIps[entry.HwAddress], inner.IpAddress)
-				}
-			}
-		}
-	}
-
-	ipMacs := make(map[string][]string)
-	for _, entry := range arpTable.Data {
-		if _, ok := ipMacs[entry.IpAddress]; !ok {
-			ipMacs[entry.IpAddress] = []string{}
-			for _, inner := range arpTable.Data {
-				if entry.IpAddress == inner.IpAddress {
-					ipMacs[entry.IpAddress] = append(ipMacs[entry.IpAddress], entry.HwAddress)
-				}
-			}
-		}
-	}
-
-	return macIps, ipMacs, nil
 }
 
 func sendDataToZabbix(sender string, config string, key string, value interface{}) error {
