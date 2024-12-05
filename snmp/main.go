@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"goarpmon/filter"
+
 	"github.com/gosnmp/gosnmp"
 )
 
@@ -20,7 +22,7 @@ type arpEntry struct {
 }
 
 type AddressesTable struct {
-	Data []addressesEntry
+	Data []addressesEntry `json:"data"`
 }
 
 type addressesEntry struct {
@@ -28,13 +30,13 @@ type addressesEntry struct {
 	ValueAddrs []string
 }
 
-func (a *ArpTable) SetWithSnmpArpTableData(host string, port uint16, community string) error {
+func (a *ArpTable) SetWithSnmpArpTableData(host string, port uint16, community string, addressFile string) error {
 	rawArpTable, err := getRawArpTableBySNMP(host, port, community, OID)
 	if err != nil {
 		return err
 	}
 
-	a.fillArpTableFields(rawArpTable, host)
+	a.fillArpTableFields(rawArpTable, host, addressFile)
 	return nil
 }
 
@@ -61,17 +63,21 @@ func getRawArpTableBySNMP(host string, port uint16, community string, oid string
 	return results, nil
 }
 
-func (a *ArpTable) fillArpTableFields(table []gosnmp.SnmpPDU, hostName string) {
+func (a *ArpTable) fillArpTableFields(table []gosnmp.SnmpPDU, hostName string, addrFile string) {
 	results := []arpEntry{}
+	legitMacAddressesTable := new(filter.LegitMacAddressesTable)
+	_ = legitMacAddressesTable.RetrieveAddresses(addrFile)
 	for _, entry := range table {
 		ipAddr := formatIpAddr(entry.Name)
 		if hwAsByteArr, ok := entry.Value.([]byte); ok {
 			hwAddr := formatMacAddr(hwAsByteArr)
-			results = append(results, arpEntry{
-				IpAddress: ipAddr,
-				HwAddress: hwAddr,
-				HostName:  hostName,
-			})
+			if !legitMacAddressesTable.IsAddrInTable(hwAddr) {
+				results = append(results, arpEntry{
+					IpAddress: ipAddr,
+					HwAddress: hwAddr,
+					HostName:  hostName,
+				})
+			}
 		}
 	}
 
@@ -92,34 +98,6 @@ func formatMacAddr(addr []byte) string {
 	return strings.Join(result, ":")
 }
 
-func CalcIpAddressesDissonances(arpTable *ArpTable) (map[string][]string, map[string][]string) {
-	macIps := make(map[string][]string)
-	for _, entry := range arpTable.Data {
-		if _, ok := macIps[entry.HwAddress]; !ok {
-			macIps[entry.HwAddress] = []string{}
-			for _, inner := range arpTable.Data {
-				if entry.HwAddress == inner.HwAddress {
-					macIps[entry.HwAddress] = append(macIps[entry.HwAddress], inner.IpAddress)
-				}
-			}
-		}
-	}
-
-	ipMacs := make(map[string][]string)
-	for _, entry := range arpTable.Data {
-		if _, ok := ipMacs[entry.IpAddress]; !ok {
-			ipMacs[entry.IpAddress] = []string{}
-			for _, inner := range arpTable.Data {
-				if entry.IpAddress == inner.IpAddress {
-					ipMacs[entry.IpAddress] = append(ipMacs[entry.IpAddress], entry.HwAddress)
-				}
-			}
-		}
-	}
-
-	return macIps, ipMacs
-}
-
 func (a *AddressesTable) CalcMacAddressesDissonances(arpTable *ArpTable) {
 	ipMacs := make(map[string][]string)
 	for _, entry := range arpTable.Data {
@@ -134,6 +112,27 @@ func (a *AddressesTable) CalcMacAddressesDissonances(arpTable *ArpTable) {
 	}
 
 	for k, v := range ipMacs {
+		a.Data = append(a.Data, addressesEntry{
+			KeyAddr:    k,
+			ValueAddrs: v,
+		})
+	}
+}
+
+func (a *AddressesTable) CalcIpAddressesDissonances(arpTable *ArpTable) {
+	macIps := make(map[string][]string)
+	for _, entry := range arpTable.Data {
+		if _, ok := macIps[entry.HwAddress]; !ok {
+			macIps[entry.HwAddress] = []string{}
+			for _, inner := range arpTable.Data {
+				if entry.HwAddress == inner.HwAddress {
+					macIps[entry.HwAddress] = append(macIps[entry.HwAddress], entry.IpAddress)
+				}
+			}
+		}
+	}
+
+	for k, v := range macIps {
 		a.Data = append(a.Data, addressesEntry{
 			KeyAddr:    k,
 			ValueAddrs: v,
