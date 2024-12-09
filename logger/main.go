@@ -23,12 +23,3 @@ func StartLogging(logFilePath string, maxLogFileSizeMb int) (*log.Logger, error)
 	})
 	return log, nil
 }
-
-func SetLoggerPath(logFilePath string, MaxFileSizeMb int) {
-	log.SetOutput(&lumberjack.Logger{
-		Filename:   logFilePath,
-		MaxSize:    MaxFileSizeMb,
-		MaxBackups: 5,
-		MaxAge:     30,
-	})
-}

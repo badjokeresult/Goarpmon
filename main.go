@@ -35,20 +35,32 @@ func main() {
 
 	sender := "zabbix_sender"
 	config := "/etc/zabbix/zabbix_sender.conf"
-	logFilePath := logFileDir + "/" + "zabbix_sender.log"
 	key := "arp.discovery"
-	if err := zabbix.SendData(logFilePath, 512, sender, config, key, arpTable); err != nil {
+	if err := zabbix.SendData(sender, config, key, arpTable); err != nil {
 		log.Fatalf("Error sending to Zabbix: %s", err)
 	}
 	for _, entry := range macIpsAddressesTable.Data {
 		key = fmt.Sprintf("arp.macIps[%s]", entry.KeyAddr)
 		value := strings.Join(entry.ValueAddrs, " ")
-		if err := zabbix.SendData(logFilePath, 512, sender, config, key, value); err != nil {
+		if err := zabbix.SendData(sender, config, key, value); err != nil {
 			log.Fatalf("Error sending to Zabbix: %s", err)
 		}
 		key = fmt.Sprintf("arp.ipCount[%s]", entry.KeyAddr)
 		val := len(entry.ValueAddrs)
-
+		if err := zabbix.SendData(sender, config, key, val); err != nil {
+			log.Fatalf("Error sending to Zabbix: %s", err)
+		}
 	}
-
+	for _, entry := range ipMacsAddressesTable.Data {
+		key = fmt.Sprintf("arp.ipMacs[%s]", entry.KeyAddr)
+		value := strings.Join(entry.ValueAddrs, " ")
+		if err := zabbix.SendData(sender, config, key, value); err != nil {
+			log.Fatalf("Error sending to Zabbix: %s", err)
+		}
+		key = fmt.Sprintf("arp.macCount[%s]", entry.KeyAddr)
+		val := len(entry.ValueAddrs)
+		if err := zabbix.SendData(sender, config, key, val); err != nil {
+			log.Fatalf("Error sending to Zabbix: %s", err)
+		}
+	}
 }
