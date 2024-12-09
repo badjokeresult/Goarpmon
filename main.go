@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"goarpmon/logger"
 	"goarpmon/snmp"
@@ -11,6 +12,10 @@ import (
 )
 
 func main() {
+	host := flag.String("host", "0.0.0.0", "Network device IPv4-address or hostname")
+	community := flag.String("community", "community", "SNMPv2c community name")
+	flag.Parse()
+
 	logFileDir := os.Getenv("ARPMONDIR")
 	logFileName := logFileDir + "/" + "arpmog.log"
 	_, err := logger.StartLogging(logFileName, 512)
@@ -18,12 +23,10 @@ func main() {
 		log.Fatalf("Error start logging: %s", err)
 	}
 
-	host := os.Args[1]
-	community := os.Args[2]
 	arpDbFile := os.Getenv("ARPMONDB")
 
 	arpTable := new(snmp.ArpTable)
-	if err := arpTable.SetWithSnmpArpTableData(host, 161, community, arpDbFile); err != nil {
+	if err := arpTable.SetWithSnmpArpTableData(*host, 161, *community, arpDbFile); err != nil {
 		log.Fatalf("Error retrieving ARP table: %s", err)
 	}
 
