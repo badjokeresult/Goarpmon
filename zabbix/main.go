@@ -11,7 +11,7 @@ func SendData(sender string, config string, key string, value interface{}) error
 	// 	return err
 	// }
 
-	// cmd := exec.Command(sender, "-c", config, "-k", key, "-o", string(data[:]), "-vv")
+	// cmd := exec.Command(sender, "-c", config, "-k", key, "-o", string(data[:]), "-vv >/var/log/arpmon/zabbix_sender.log 2>&1")
 
 	// err = cmd.Run()
 	// return err

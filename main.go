@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"goarpmon/logger"
 	"goarpmon/snmp"
 	"goarpmon/zabbix"
 	"log"
@@ -16,15 +15,15 @@ func main() {
 	community := flag.String("community", "community", "SNMPv2c community name")
 	flag.Parse()
 
-	logFileDir := os.Getenv("ARPMONDIR")
-	logFileName := logFileDir + "/" + "arpmog.log"
-	_, err := logger.StartLogging(logFileName, 512)
+	logFileName := "/var/log/arpmon/arpmon.log"
+	f, err := os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		log.Fatalf("Error start logging: %s", err)
 	}
+	defer f.Close()
+	log.SetOutput(f)
 
-	arpDbFile := os.Getenv("ARPMONDB")
-
+	arpDbFile := "/etc/arpmon/arp.db"
 	arpTable := new(snmp.ArpTable)
 	if err := arpTable.SetWithSnmpArpTableData(*host, 161, *community, arpDbFile); err != nil {
 		log.Fatalf("Error retrieving ARP table: %s", err)
@@ -36,7 +35,7 @@ func main() {
 	macIpsAddressesTable.CalcIpAddressesDissonances(arpTable)
 	ipMacsAddressesTable.CalcMacAddressesDissonances(arpTable)
 
-	sender := "zabbix_sender"
+	sender := "/usr/bin/zabbix_sender"
 	config := "/etc/zabbix/zabbix_sender.conf"
 	key := "arp.discovery"
 	if err := zabbix.SendData(sender, config, key, arpTable); err != nil {
