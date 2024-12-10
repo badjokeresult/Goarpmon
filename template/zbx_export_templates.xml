@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<zabbix_export>
+    <version>7.0</version>
+    <template_groups>
+        <template_group>
+            <uuid>7df96b18c230490a9a0a9e2307226338</uuid>
+            <name>Templates</name>
+        </template_group>
+    </template_groups>
+    <templates>
+        <template>
+            <uuid>a5ce643571644cec9480ea7c0679f0e5</uuid>
+            <template>Template ARP Monitoring</template>
+            <name>Template ARP Monitoring</name>
+            <description>Rafael Gustavo Gassner 02/2021
+This script activelly scans arp and sends to zabbix server using zabbix_sender.
+arp-scan should be installed and interfaces variable should
+ be configured for your environment.
+You will want to run every 10 minutes or so, using crontab.
+First run(s) might not populate data, since LLD items
+ are still beeing created in zabbix server.
+With the script and template, you will be able to:
+ - Detect newly connected devices on the network.
+ - Have a history of which macs were used by which ips and vice versa.
+ - Detect if there are multiple ips associated to the same mac.
+ - Detect if there are multiple macs associated to the same ip address.
+ - Identify the active period on the network for each device.
+Since this is designed for a small environment, the trigger for
+new device has no recovery expression, and should be manually disabled.
+You can configure the &quot;new device&quot; trigger disabled for initial run.
+After that you could disable each trigger mannualy when you have
+recognized the new device as not beeing a rogue one.
+In the zabbix template, &quot;Allowed hosts&quot; variable should be configured
+ for your environment in item prototypes and in discovery rule.</description>
+            <groups>
+                <group>
+                    <name>Templates</name>
+                </group>
+            </groups>
+            <discovery_rules>
+                <discovery_rule>
+                    <uuid>4560e32839fa433f9f5d85f5e977f372</uuid>
+                    <name>Address discovery</name>
+                    <type>TRAP</type>
+                    <key>arp.discovery</key>
+                    <delay>0</delay>
+                    <allowed_hosts>10.0.0.0/8,192.168.0.0/16,127.0.0.0/8</allowed_hosts>
+                    <lifetime>30d</lifetime>
+                    <enabled_lifetime_type>DISABLE_NEVER</enabled_lifetime_type>
+                    <item_prototypes>
+                        <item_prototype>
+                            <uuid>602060e6bd78474aa007ced8ff8ba671</uuid>
+                            <name>Ip address count for mac {#HWADDRESS}</name>
+                            <type>TRAP</type>
+                            <key>arp.ipCount[{#HWADDRESS}]</key>
+                            <delay>0</delay>
+                            <history>7d</history>
+                            <allowed_hosts>10.0.0.0/8,192.168.0.0/16,127.0.0.0/8</allowed_hosts>
+                            <units>IP</units>
+                            <tags>
+                                <tag>
+                                    <tag>Application</tag>
+                                    <value>ARP</value>
+                                </tag>
+                            </tags>
+                            <trigger_prototypes>
+                                <trigger_prototype>
+                                    <uuid>f54fad11da2342b4a6eb12fe63b49a38</uuid>
+                                    <expression>last(/Template ARP Monitoring/arp.ipCount[{#HWADDRESS}],#1)&lt;&gt;0</expression>
+                                    <name>New device using mac {#HWADDRESS} and IP {#IPADDRESS} detected by {#HOSTNAME} arp table.</name>
+                                    <priority>INFO</priority>
+                                    <description>Identify new physical addresses in the same network as your host. Triggers should be disabled mannualy. Recommended to create triggers disabled on the first run.</description>
+                                    <tags>
+                                        <tag>
+                                            <tag>feature</tag>
+                                            <value>arp</value>
+                                        </tag>
+                                    </tags>
+                                </trigger_prototype>
+                            </trigger_prototypes>
+                        </item_prototype>
+                        <item_prototype>
+                            <uuid>0f41c1f4a4de4bc3a063c0db2a35e1c8</uuid>
+                            <name>Mac(s) associated with IP {#IPADDRESS}</name>
+                            <type>TRAP</type>
+                            <key>arp.ipMacs[{#IPADDRESS}]</key>
+                            <delay>0</delay>
+                            <history>7d</history>
+                            <value_type>TEXT</value_type>
+                            <trends>0</trends>
+                            <allowed_hosts>10.0.0.0/8,192.168.0.0/16,127.0.0.0/8</allowed_hosts>
+                            <tags>
+                                <tag>
+                                    <tag>Application</tag>
+                                    <value>ARP</value>
+                                </tag>
+                            </tags>
+                        </item_prototype>
+                        <item_prototype>
+                            <uuid>64cbaaf628b4496a80415485982e84c1</uuid>
+                            <name>Mac address count for IP {#IPADDRESS}</name>
+                            <type>TRAP</type>
+                            <key>arp.macCount[{#IPADDRESS}]</key>
+                            <delay>0</delay>
+                            <history>7d</history>
+                            <allowed_hosts>10.0.0.0/8,192.168.0.0/16,127.0.0.0/8</allowed_hosts>
+                            <units>mac</units>
+                            <tags>
+                                <tag>
+                                    <tag>Application</tag>
+                                    <value>ARP</value>
+                                </tag>
+                            </tags>
+                        </item_prototype>
+                        <item_prototype>
+                            <uuid>f02b8a6f2ded491c8cce68f4daff8244</uuid>
+                            <name>Ip address(es) associated with mac {#HWADDRESS}</name>
+                            <type>TRAP</type>
+                            <key>arp.macIps[{#HWADDRESS}]</key>
+                            <delay>0</delay>
+                            <history>7d</history>
+                            <value_type>TEXT</value_type>
+                            <trends>0</trends>
+                            <allowed_hosts>10.0.0.0/8,192.168.0.0/16,127.0.0.0/8</allowed_hosts>
+                            <tags>
+                                <tag>
+                                    <tag>Application</tag>
+                                    <value>ARP</value>
+                                </tag>
+                            </tags>
+                        </item_prototype>
+                    </item_prototypes>
+                    <trigger_prototypes>
+                        <trigger_prototype>
+                            <uuid>33eac91ab2a84eceb9a707ab1fadb491</uuid>
+                            <expression>last(/Template ARP Monitoring/arp.macCount[{#IPADDRESS}],#1)&gt;1 and find(/Template ARP Monitoring/arp.ipMacs[{#IPADDRESS}],#1,&quot;like&quot;,&quot;lala&quot;)=0</expression>
+                            <name>IP  {#IPADDRESS} in use in more than one mac detected by {#HOSTNAME} arp table. Adresses found {ITEM.LASTVALUE2}</name>
+                            <priority>INFO</priority>
+                            <tags>
+                                <tag>
+                                    <tag>feature</tag>
+                                    <value>arp</value>
+                                </tag>
+                            </tags>
+                        </trigger_prototype>
+                        <trigger_prototype>
+                            <uuid>1e97c6d492584b11b54996d971c6a69a</uuid>
+                            <expression>last(/Template ARP Monitoring/arp.ipCount[{#HWADDRESS}],#1)&gt;1 and find(/Template ARP Monitoring/arp.macIps[{#HWADDRESS}],#1,&quot;like&quot;,&quot;lala&quot;)=0</expression>
+                            <name>Mac  {#HWADDRESS} in use in more than one IP detected by {#HOSTNAME} arp table. Adresses found {ITEM.LASTVALUE2}</name>
+                            <priority>INFO</priority>
+                            <tags>
+                                <tag>
+                                    <tag>feature</tag>
+                                    <value>arp</value>
+                                </tag>
+                            </tags>
+                        </trigger_prototype>
+                    </trigger_prototypes>
+                    <lld_macro_paths>
+                        <lld_macro_path>
+                            <lld_macro>{#HOSTNAME}</lld_macro>
+                            <path>$.hostName</path>
+                        </lld_macro_path>
+                        <lld_macro_path>
+                            <lld_macro>{#HWADDRESS}</lld_macro>
+                            <path>$.hwAddress</path>
+                        </lld_macro_path>
+                        <lld_macro_path>
+                            <lld_macro>{#IPADDRESS}</lld_macro>
+                            <path>$.ipAddress</path>
+                        </lld_macro_path>
+                    </lld_macro_paths>
+                </discovery_rule>
+            </discovery_rules>
+        </template>
+    </templates>
+</zabbix_export>
