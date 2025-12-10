@@ -18,9 +18,14 @@ func main() {
 	}
 	log.Println("Config file `/etc/arpmon/config.toml` was parsed successfully")
 
+	isInit := flag.Bool("init", false, "Flag that should be provided through the first launch")
 	host := flag.String("host", "0.0.0.0", "Network device IPv4-address or hostname")
-	community := flag.String("community", "community", "SNMPv2c community name")
+	community := flag.String("community", "", "SNMPv2c community name")
 	flag.Parse()
+
+	if isInit {
+
+	}
 
 	logFileName := conf.Arp.Log
 	f, err := os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)

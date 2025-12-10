@@ -9,7 +9,7 @@ import (
 	"github.com/gosnmp/gosnmp"
 )
 
-const OID string = "1.3.6.1.2.1.4.22.1.2"
+const ARP_TABLE_OID string = "1.3.6.1.2.1.4.22.1.2"
 
 type ArpTable struct {
 	Data []arpEntry `json:"data"`
@@ -31,7 +31,7 @@ type addressesEntry struct {
 }
 
 func (a *ArpTable) SetWithSnmpArpTableData(host string, port uint16, community string, addressFile string) error {
-	rawArpTable, err := getRawArpTableBySNMP(host, port, community, OID)
+	rawArpTable, err := getRawArpTableBySNMP(host, port, community, ARP_TABLE_OID)
 	if err != nil {
 		return err
 	}
